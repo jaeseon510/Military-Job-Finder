@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+:root { color-scheme: light; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #f7f9fd; color: #152441; font-family: Arial, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
+a { color: inherit; }
+button, input, select { font: inherit; }
+button, a, input, select { outline-offset: 4px; }

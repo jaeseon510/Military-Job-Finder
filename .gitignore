@@ -1,0 +1,12 @@
+node_modules/
+.next/
+out/
+.cache/
+data/
+.state/
+.env*
+!.env.example
+*.tsbuildinfo
+.DS_Store
+coverage/
+artifacts/
