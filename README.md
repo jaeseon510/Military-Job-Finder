@@ -12,7 +12,7 @@ pnpm crawl
 pnpm dev
 ```
 
-[공고 목록](http://localhost:3000/jobs/) · [검토 대기](http://localhost:3000/review/) · [제외 공고](http://localhost:3000/excluded/)
+[공고 목록](http://localhost:3000/jobs/) · [검토 대기](http://localhost:3000/review/) · [제외 공고](http://localhost:3000/excluded/) · [과거 공고](http://localhost:3000/history/)
 
 | 명령 | 동작 |
 | --- | --- |
@@ -36,6 +36,8 @@ DB는 첫 실행에 `data/military-jobs.sqlite`로 자동 생성됩니다. 환�
 | 사이트 HTML 변경·필드명 변경 | [`src/collector/selectors.ts`](src/collector/selectors.ts) |
 | 병역·경력·직무 판정 순서 | [`src/core/classify.ts`](src/core/classify.ts) |
 | 문의문 | [`src/core/inquiry.ts`](src/core/inquiry.ts) |
+| 과거 공개 채용사례 추가·수정 | [`config/history.ts`](config/history.ts) |
+| 업종·분야 필터 / 과거 기록 판정 | [`src/core/filter.ts`](src/core/filter.ts) / [`src/core/history.ts`](src/core/history.ts) |
 | 화면 | [`src/ui/dashboard.tsx`](src/ui/dashboard.tsx), [`src/app/globals.css`](src/app/globals.css) |
 
 **일반적인 변경은 `config/rules.ts` 수정 → `pnpm test` → `pnpm classify` → `pnpm build`면 끝납니다.** 설정을 배포하면 Actions도 기존 DB를 새 기준으로 다시 분류합니다. 테스트 입력 예시는 `tests/fixtures.ts`, 예외 사례는 `tests/classify.test.ts`에 있습니다.
@@ -63,6 +65,18 @@ DB는 첫 실행에 `data/military-jobs.sqlite`로 자동 생성됩니다. 환�
 명확한 제외 사유가 하나라도 있으면 `/excluded`가 우선하며, 미확인 항목도 상세에서 함께 보여줍니다. 제외 근거는 `exclusionReasons`, 미확인 근거는 `reviewReasons`에 별도로 저장합니다. 검토 대기는 지원 가능이나 신규편입 가능으로 확정하지 않습니다. 잔여 TO 근거를 충족한 `LIKELY_NEW_ENTRY`는 기존처럼 회사 문의가 필요한 지원 검토 대상으로 유지합니다.
 
 ‘신규편입 확정만’은 확정 상태만 선택합니다. 각 목록에서 원문과 변경 이력을 확인할 수 있습니다. 직원 수·제품 여부 미확인 및 SI 위험은 우선순위 검토 플래그이며 단독 제외·검토 대기 사유가 아닙니다. 기업 추적은 브라우저 저장소를 사용하므로 기기 간 동기화되지 않습니다.
+
+## 과거 공고 모아보기
+
+`/history`는 현재 공고 세 목록과 별도로 마감된 원문과 과거 채용사례를 보여줍니다. 기본 화면은 현역 산업기능요원 개발직 중 명확한 제외 사유가 없는 **과거 후보·문의 대상**이며, 개인의 당시 지원 자격이나 합격 가능성을 판정한 목록이 아닙니다. 업종·직무·지역·검색과 모집 연도, 당시 자동분류 후보·정보 확인 필요·당시 제외·전체 보기를 조합할 수 있습니다.
+
+- **당시 수집 원문**: `JobSnapshot`에서 접수 중 수집한 원문을 찾아 그 수집일로 재분류합니다. 현재 `config/rules.ts`의 직무·경력 기준을 적용하며, 당시 제도·개인 자격을 복원하는 기능은 아닙니다. 조건에 맞는 기록이 여러 개면 가장 최근 것을 사용합니다. 이후 전직/경력 전용으로 바뀌었어도 이전 모집 근거를 남깁니다. 맞는 기록이 없으면 접수 중이던 마지막 원문과 제외 근거를 보관합니다.
+- **당시 원문 미확인**: 처음 수집할 때 이미 마감됐거나 유효한 접수기간을 확인하지 못한 경우입니다. 마감일을 임의로 되돌려 신규편입 가능으로 추론하지 않고 확인 필요로 표시합니다.
+- **공개 채용사례**: `config/history.ts`에서 출처 링크·확인일·모집 시기·요약·한계를 직접 관리합니다. 초기 자료는 인프랩 백엔드와 2021년 그렙 백엔드 모집 이력입니다. 신입 허용 등 불명확한 항목은 확인 필요로 남기며, 확인되지 않은 모집 연도·TO·직원 수를 만들지 않습니다. 요약은 원문 전체가 아닙니다.
+
+과거 화면의 TO·병역 판정에는 **당시 기록**임을 표시하며, 현재 `/jobs`에 지원 가능한 공고로 추가하지 않습니다. `USER_ELIGIBILITY`는 항상 `unknown`입니다. 기존 `/excluded`의 마감 공고와 과거 화면은 같은 원문을 다른 목적으로 볼 수 있습니다. 현재 공고·검토 대기·제외 공고끼리는 여전히 겹치지 않습니다.
+
+자동 보관은 수집 시작 이후부터 누적됩니다. 수집 이전에 사라진 병역일터 공고를 모두 복구하거나 과거 전체 시장을 검색한 결과가 아닙니다. 외부 사이트 자동 수집은 추가하지 않았으며, 공개 참고사례만 수동 관리합니다. 재분류·빌드 시 기존 DB에서 과거 목록도 갱신합니다.
 
 ## 병역 판정과 한계
 
@@ -132,7 +146,7 @@ src/collector/   공개 HTTP 수집·HTML 선택자·파서
 src/core/        타입·판정·hash/변경 감지·문의문
 src/db/          Drizzle schema·DB 연결·저장
 src/ui/          대시보드와 화면용 데이터 읽기
-src/app/         /jobs, /review, /excluded, 정적 진입점
+src/app/         /jobs, /review, /excluded, /history, 정적 진입점
 scripts/         crawl / classify / export / 원격 상태 보존
 tests/           네트워크 없이 실행하는 단위 테스트
 migrations/      SQLite 버전별 변경

@@ -57,6 +57,12 @@ export interface JobView extends JobSource, Classification {
   firstSeenAt: string;
   lastSeenAt: string;
   changes: { at: string; types: Change[] }[];
+  historical?: {
+    basis: "snapshot" | "reference" | "unverified";
+    assessedAt: string | null;
+    year: string | null;
+    note: string;
+  };
 }
 
 export interface CrawlReport {
@@ -72,4 +78,5 @@ export interface Dataset {
   generatedAt: string;
   report: CrawlReport | null;
   jobs: JobView[];
+  history?: JobView[];
 }
