@@ -2,8 +2,9 @@ import type { MilitaryStatus } from "../src/core/types";
 
 // 기준 변경은 이 파일에서 시작하고 pnpm classify로 기존 공고에 다시 적용합니다.
 export const rules = {
-  version: 1,
+  version: 2,
   regions: ["서울", "경기", "인천"],
+  otherRegions: ["강원", "충북", "충청북", "충남", "충청남", "전북", "전라북", "전남", "전라남", "경북", "경상북", "경남", "경상남", "부산", "대구", "광주", "대전", "울산", "세종", "제주"],
   defaultStatuses: ["CONFIRMED_NEW_ENTRY", "LIKELY_NEW_ENTRY", "CONDITIONAL_FUTURE"] as MilitaryStatus[],
   roles: {
     백엔드: ["백엔드", "backend", "back-end", "API", "Go", "Golang", "TypeScript", "Node", "Node.js", "NestJS", "Java", "Spring", "Spring Boot", "PostgreSQL", "MySQL", "Redis", "Kafka"],
@@ -19,6 +20,7 @@ export const rules = {
   experienceDenied: ["주니어", "시니어", "junior", "senior", "lead", "tech lead"],
   experienceAllowed: "신입|경력\\s*무관",
   experienceYears: "(?:경력\\s*[:：()]*\\s*)?\\d+\\s*년\\s*(?:이상|↑|\\+)|경력\\s*\\d+\\s*[~～-]\\s*\\d+\\s*년",
+  experienceOnly: "^경력(?:직|자)?$|경력(?:직|자)?\\s*(?:만|전용)",
   preferredEmployeeCount: 50,
   minimumProductEmployeeCount: 30,
   military: {

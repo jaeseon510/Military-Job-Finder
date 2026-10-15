@@ -7,7 +7,7 @@ import { rules, statusLabels } from "../../config/rules";
 import { inquiryText } from "../core/inquiry";
 import type { Change, Dataset, MilitaryStatus, Role } from "../core/types";
 import { koreaToday } from "../core/date";
-import { classifyJob } from "../core/classify";
+import { classifyJob, jobGroup } from "../core/classify";
 
 const statusTone: Record<MilitaryStatus, string> = { CONFIRMED_NEW_ENTRY: "green", LIKELY_NEW_ENTRY: "amber", CONDITIONAL_FUTURE: "blue", TRANSFER_ONLY: "gray", SUPPLEMENTARY_ONLY: "gray", RESEARCH_ONLY: "gray", NO_ACTIVE_TO: "red", UNKNOWN: "gray" };
 const changes: Record<Change, string> = { NEW: "신규 공고", CLOSED: "접수 마감", REOPENED: "접수 재개", TO_CHANGED: "TO 변경", ENROLLED_CHANGED: "편입인원 변경", MILITARY_CHANGED: "병역조건·본문 변경", SALARY_CHANGED: "급여 변경", DEADLINE_CHANGED: "마감일 변경", CONTENT_CHANGED: "내용 변경" };
@@ -17,7 +17,12 @@ const formatTime = (value: string) => value ? new Intl.DateTimeFormat("ko-KR", {
 
 function Badge({ status }: { status: MilitaryStatus }) { return <span className={`badge ${statusTone[status]}`}><span className="status-dot" />{statusLabels[status]}</span>; }
 
-export function Dashboard({ dataset, mode }: { dataset: Dataset; mode: "jobs" | "excluded" }) {
+export function Dashboard({ dataset, mode }: { dataset: Dataset; mode: "jobs" | "review" | "excluded" }) {
+  const page = {
+    jobs: { title: "현역 신규편입 공고 찾기", description: "현역 산업기능요원 신규편입 개발 공고만 한눈에", list: "공고 목록" },
+    review: { title: "검토 대기 공고", description: "정보가 부족한 공고를 따로 보관합니다 · 지원 가능으로 확정하지 않습니다", list: "정보 부족 · 검토 대기" },
+    excluded: { title: "제외 공고 검토", description: "명확한 제외 근거를 확인하고, 놓친 가능성을 검토하세요", list: "자동 제외 공고" },
+  }[mode];
   const [query, setQuery] = useState("");
   const [statuses, setStatuses] = useState<MilitaryStatus[]>([...rules.defaultStatuses]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -60,16 +65,17 @@ export function Dashboard({ dataset, mode }: { dataset: Dataset; mode: "jobs" | 
 
   const currentJobs = useMemo(() => dataset.jobs.map(job => ({ ...job, ...classifyJob(job, new Date(now)) })), [dataset, now]);
   const visibleJobs = useMemo(() => currentJobs.filter(job => {
-    if (mode === "excluded" ? !job.excluded : job.excluded) return false;
+    if (jobGroup(job) !== mode) return false;
     if (mode === "jobs" && !statuses.includes(job.military.status)) return false;
     if (roles.length && !roles.some(role => job.roles.includes(role))) return false;
     if (regions.length && !regions.some(region => job.location.startsWith(region))) return false;
     if (trackedOnly && !saved.includes(job.companyCode)) return false;
-    if (excludedReason !== "all" && mode === "excluded" && !job.exclusionReasons.some(reason => reason.includes(excludedReason))) return false;
+    if (excludedReason !== "all" && mode !== "jobs" && !(mode === "review" ? job.reviewReasons : job.exclusionReasons).some(reason => reason.includes(excludedReason))) return false;
     return !query || [job.companyName, job.title, job.duties, job.remarks, ...job.keywords].join(" ").toLowerCase().includes(query.toLowerCase());
   }).sort((a, b) => sort === "deadline" ? (a.deadline || "9999").localeCompare(b.deadline || "9999") : sort === "latest" ? b.firstSeenAt.localeCompare(a.firstSeenAt) : b.score - a.score || b.firstSeenAt.localeCompare(a.firstSeenAt)), [currentJobs, mode, statuses, roles, regions, trackedOnly, saved, excludedReason, query, sort]);
   const selected = visibleJobs.find(job => job.id === selectedId) || visibleJobs[0];
-  const eligible = currentJobs.filter(job => !job.excluded);
+  const eligible = currentJobs.filter(job => jobGroup(job) === "jobs");
+  const reviewCount = currentJobs.filter(job => jobGroup(job) === "review").length;
   const lastCheck = dataset.report?.completedAt || dataset.generatedAt;
   const stale = !!lastCheck && now - Date.parse(lastCheck) > 36 * 60 * 60 * 1000;
   const toggle = <T,>(values: T[], value: T) => values.includes(value) ? values.filter(entry => entry !== value) : [...values, value];
@@ -97,6 +103,7 @@ export function Dashboard({ dataset, mode }: { dataset: Dataset; mode: "jobs" | 
         <Link href="/jobs" className={mode === "jobs" && !trackedOnly ? "nav-item active" : "nav-item"}><HouseIcon size={24} weight={mode === "jobs" ? "fill" : "regular"} />대시보드</Link>
         <Link href={mode === "jobs" ? "#job-list" : "/jobs"} className="nav-item" onClick={() => setTrackedOnly(false)}><ArticleIcon size={24} />공고 목록</Link>
         <button className={`nav-item ${trackedOnly ? "active" : ""}`} onClick={() => { setTrackedOnly(!trackedOnly); setSelectedId(null); }}><StarIcon size={24} weight={trackedOnly ? "fill" : "regular"} />추적 기업 <span className="nav-count">{saved.length}</span></button>
+        <Link href="/review" className={`nav-item ${mode === "review" ? "active" : ""}`}><InfoIcon size={24} />검토 대기 <span className="nav-count">{reviewCount}</span></Link>
         <Link href="/excluded" className={`nav-item ${mode === "excluded" ? "active" : ""}`}><ProhibitIcon size={24} />제외 공고</Link>
         <button className="nav-item" onClick={() => setSettings(true)}><GearSixIcon size={24} />기준 설정</button>
       </nav>
@@ -106,7 +113,7 @@ export function Dashboard({ dataset, mode }: { dataset: Dataset; mode: "jobs" | 
 
     <div className="workspace">
       <header className="topbar">
-        <div className="page-title"><div className="shield-mark"><ShieldCheckIcon size={32} weight="fill" /></div><div><h1>{mode === "excluded" ? "제외 공고 검토" : "현역 신규편입 공고 찾기"}</h1><p>{mode === "excluded" ? "제외된 근거를 확인하고, 놓친 가능성을 검토하세요" : "현역 산업기능요원 신규편입 개발 공고만 한눈에"}</p></div></div>
+        <div className="page-title"><div className="shield-mark"><ShieldCheckIcon size={32} weight="fill" /></div><div><h1>{page.title}</h1><p>{page.description}</p></div></div>
         <div className="topbar-right"><span>좋은 기회를 빠르게, 더 나은 내일을 위해.</span><button className="icon-button" title="수집 상태 확인" aria-label="수집 상태 확인" onClick={() => setToast(dataset.report ? `마지막 수집 ${formatTime(lastCheck)} · ${dataset.report.updated}개 확인 · 오류 ${dataset.report.errors.length}개` : "아직 완료된 수집 이력이 없습니다.")}><BellIcon size={21} /></button></div>
       </header>
 
@@ -114,7 +121,7 @@ export function Dashboard({ dataset, mode }: { dataset: Dataset; mode: "jobs" | 
         <div className="filter-bar">
           <div className="filter-chips">
             {mode === "jobs" && (rules.defaultStatuses).map(status => <button key={status} aria-pressed={status === "CONFIRMED_NEW_ENTRY" ? statuses.length === 1 && statuses[0] === status : statuses.includes(status)} className={`filter-chip status-filter ${statuses.includes(status) ? "selected" : ""}`} onClick={() => setStatuses(status === "CONFIRMED_NEW_ENTRY" ? statuses.length === 1 && statuses[0] === status ? [...rules.defaultStatuses] : [status] : toggle(statuses, status))}><span className={`status-dot ${statusTone[status]}`} />{status === "CONFIRMED_NEW_ENTRY" ? "신규편입 확정만" : status === "LIKELY_NEW_ENTRY" ? "문의필요 포함" : "조건부"}</button>)}
-            {mode === "excluded" && <label className="reason-select"><FunnelIcon size={16} /><select aria-label="제외 사유" value={excludedReason} onChange={event => setExcludedReason(event.target.value)}><option value="all">모든 제외 사유</option>{["전직", "보충역", "전문연구", "경력", "제외 직무", "지역", "TO", "정보", "마감"].map(reason => <option key={reason} value={reason}>{reason}</option>)}</select></label>}
+            {mode !== "jobs" && <label className="reason-select"><FunnelIcon size={16} /><select aria-label={mode === "review" ? "검토 사유" : "제외 사유"} value={excludedReason} onChange={event => setExcludedReason(event.target.value)}><option value="all">{mode === "review" ? "모든 검토 사유" : "모든 제외 사유"}</option>{(mode === "review" ? ["현역", "TO", "개발직", "신입", "근무지", "DevOps", "접수기간"] : ["전직", "보충역", "전문연구", "경력", "제외 직무", "지역", "TO", "마감", "직원"]).map(reason => <option key={reason} value={reason}>{reason}</option>)}</select></label>}
             <span className="filter-separator" />
             {(Object.keys(rules.roles) as Role[]).map(role => <button aria-pressed={roles.includes(role)} className={`filter-chip ${roles.includes(role) ? "selected" : ""}`} key={role} onClick={() => setRoles(toggle(roles, role))}>{role}</button>)}
             <span className="filter-separator" />
@@ -126,15 +133,15 @@ export function Dashboard({ dataset, mode }: { dataset: Dataset; mode: "jobs" | 
         <div className="stats-grid">
           <Stat icon={<CalendarBlankIcon size={28} />} label="오늘 신규" value={eligible.filter(job => koreaToday(new Date(job.firstSeenAt)) === today).length} tone="blue" hint="지원 검토 대상" />
           <Stat icon={<ChatCircleIcon size={28} />} label="문의 필요" value={eligible.filter(job => job.military.status === "LIKELY_NEW_ENTRY").length} tone="amber" hint="신규편입 확인 필요" />
-          <Stat icon={<StarIcon size={29} />} label="추적 기업" value={saved.length} tone="blue" hint="이 브라우저에 저장" />
+          <Stat icon={<InfoIcon size={29} />} label="검토 대기" value={reviewCount} tone="amber" hint="정보 부족 · 별도 보관" />
           <Stat icon={<ProhibitIcon size={29} />} label="제외 공고" value={currentJobs.filter(job => job.excluded).length} tone="red" hint="제외 근거 저장됨" />
         </div>
 
 
 
         <section className="panel jobs-panel" id="job-list" aria-labelledby="list-title">
-          <div className="panel-header"><div><h2 id="list-title">{trackedOnly ? "추적 기업의 공고" : mode === "excluded" ? "자동 제외 공고" : "공고 목록"}</h2>{mode === "excluded" && <p>제외 사유를 클릭해 원문 근거를 검토하세요.</p>}</div><div className="list-controls"><span>총 <b>{visibleJobs.length}</b>개의 공고</span><div className="sort-select"><select value={sort} onChange={event => setSort(event.target.value)} aria-label="공고 정렬"><option value="recommended">추천순</option><option value="latest">발견 최신순</option><option value="deadline">마감 임박순</option></select><CaretDownIcon size={15} /></div></div></div>
-          <div className="table-scroll"><table className="job-table"><thead><tr><th>회사 / 공고</th><th>직무</th><th>병역 판정</th><th>TO <span className="table-muted">배정·편입</span></th><th>경력</th><th>급여</th><th>{mode === "excluded" ? "제외 이유" : "마감일"}</th><th>추적</th></tr></thead><tbody>
+          <div className="panel-header"><div><h2 id="list-title">{trackedOnly ? "추적 기업의 공고" : page.list}</h2>{mode !== "jobs" && <p>{mode === "review" ? "언급이 없거나 근거가 부족한 항목을 확인하세요. 명확한 제외 사유가 있으면 제외 목록에 보관합니다." : "제외 사유를 클릭해 원문 근거를 검토하세요."}</p>}</div><div className="list-controls"><span>총 <b>{visibleJobs.length}</b>개의 공고</span><div className="sort-select"><select value={sort} onChange={event => setSort(event.target.value)} aria-label="공고 정렬"><option value="recommended">추천순</option><option value="latest">발견 최신순</option><option value="deadline">마감 임박순</option></select><CaretDownIcon size={15} /></div></div></div>
+          <div className="table-scroll"><table className="job-table"><thead><tr><th>회사 / 공고</th><th>직무</th><th>병역 판정</th><th>TO <span className="table-muted">배정·편입</span></th><th>경력</th><th>급여</th><th>{mode === "jobs" ? "마감일" : mode === "review" ? "확인 필요" : "제외 이유"}</th><th>추적</th></tr></thead><tbody>
             {visibleJobs.slice(0, displayCount).map(job => <tr key={job.id} className={selected?.id === job.id ? "selected-row" : ""}>
               <td><button className="job-title-button" onClick={() => selectJob(job.id)} aria-pressed={selected?.id === job.id} aria-controls="job-detail"><strong>{job.companyName}</strong><span title={job.title}>{job.title}</span></button></td>
               <td><span className="role-text">{job.roles.join(" · ") || "직무 미확인"}</span><small className="job-location" title={job.location}>{job.location.split(" ").slice(0, 2).join(" ")}</small></td>
@@ -142,11 +149,11 @@ export function Dashboard({ dataset, mode }: { dataset: Dataset; mode: "jobs" | 
               <td className="quota">{job.activeAssigned ?? "?"}<span> · </span>{job.activeEnrolled ?? "?"}</td>
               <td>{job.experience || "미확인"}</td>
               <td>{job.salary || "미공개"}</td>
-              <td>{mode === "excluded" ? <button className="excluded-reason" onClick={() => selectJob(job.id)}>{job.exclusionReasons[0]}</button> : <><span>{job.deadline || job.applicationPeriod || "확인 필요"}</span><small className="last-check">확인 {formatTime(job.lastSeenAt)}</small></>}</td>
+              <td>{mode !== "jobs" ? <button className={`excluded-reason ${mode === "review" ? "review-reason" : ""}`} onClick={() => selectJob(job.id)}>{(mode === "review" ? job.reviewReasons : job.exclusionReasons)[0]}</button> : <><span>{job.deadline || job.applicationPeriod || "확인 필요"}</span><small className="last-check">확인 {formatTime(job.lastSeenAt)}</small></>}</td>
               <td><button className={`star-button ${saved.includes(job.companyCode) ? "saved" : ""}`} aria-label={`${job.companyName} 추적 ${saved.includes(job.companyCode) ? "해제" : "추가"}`} aria-pressed={saved.includes(job.companyCode)} onClick={() => track(job.companyCode)}><StarIcon size={21} weight={saved.includes(job.companyCode) ? "fill" : "regular"} /></button></td>
             </tr>)}
           </tbody></table></div>
-          {!visibleJobs.length && <div className="empty-state"><div className="empty-icon"><MagnifyingGlassIcon size={34} /></div><h3>{dataset.jobs.length ? "조건에 맞는 공고가 아직 없습니다" : "첫 번째 수집을 기다리고 있어요"}</h3><p>{dataset.jobs.length ? "필터를 조정하거나 제외 공고에서 판정 근거를 확인해 보세요." : "공개 채용공고를 수집하면 이곳에 지원 검토 대상이 표시됩니다."}</p><div><button className="secondary-button" onClick={reset}>필터 초기화</button>{mode === "jobs" && <Link className="primary-button" href="/excluded">제외 공고 확인 <ArrowSquareOutIcon size={15} /></Link>}</div></div>}
+          {!visibleJobs.length && <div className="empty-state"><div className="empty-icon"><MagnifyingGlassIcon size={34} /></div><h3>{dataset.jobs.length ? "조건에 맞는 공고가 아직 없습니다" : "첫 번째 수집을 기다리고 있어요"}</h3><p>{dataset.jobs.length ? "필터를 조정하거나 검토 대기·제외 공고에서 판정 근거를 확인해 보세요." : "공개 채용공고를 수집하면 이곳에 지원 검토 대상이 표시됩니다."}</p><div><button className="secondary-button" onClick={reset}>필터 초기화</button>{mode === "jobs" && <Link className="primary-button" href="/review">검토 대기 확인 <ArrowSquareOutIcon size={15} /></Link>}</div></div>}
           {visibleJobs.length > displayCount && <div className="load-more"><button className="secondary-button" onClick={() => setDisplayCount(displayCount + 20)}>공고 더 보기 ({visibleJobs.length - displayCount}개 남음)</button></div>}
         </section>
 
@@ -160,6 +167,7 @@ export function Dashboard({ dataset, mode }: { dataset: Dataset; mode: "jobs" | 
           <div className="detail-grid"><div><h3><CodeIcon size={18} />포지션 정보</h3><dl><dt>담당업무</dt><dd>{selected.duties || "미확인"}</dd><dt>경력 / 학력</dt><dd>{selected.experience} / {selected.education || "미확인"}</dd><dt>급여 / 접수기간</dt><dd>{selected.salary || "미공개"} / {selected.applicationPeriod || "미확인"}</dd><dt>요원 / 고용형태</dt><dd>{selected.serviceType} / {selected.employmentType}</dd><dt>업종 / 직원 수</dt><dd>{selected.industry || "미확인"} / {selected.employeeCount === null ? "미확인" : `${selected.employeeCount}명`}</dd></dl><div className="keyword-list">{selected.keywords.map(word => <span key={word}>{word}</span>)}</div></div>
           <div><h3><ShieldCheckIcon size={18} />병역조건 확인</h3><dl><dt>현역 배정 / 편입</dt><dd>{selected.activeAssigned ?? "미확인"} / {selected.activeEnrolled ?? "미확인"}</dd><dt>보충역 배정 / 편입</dt><dd>{selected.supplementaryAssigned ?? "미확인"} / {selected.supplementaryEnrolled ?? "미확인"}</dd><dt>TO_AVAILABLE</dt><dd>{answers[selected.military.toAvailable]} <small>· 공개 수치 기준</small></dd><dt>NEW_ENTRY_ALLOWED</dt><dd>{answers[selected.military.newEntryAllowed]}</dd><dt>USER_ELIGIBILITY</dt><dd>unknown</dd><dt>전직자 채용가능</dt><dd>{answers[selected.transferAllowed]} <small>· 신규편입 여부와 별개</small></dd></dl><p className="eligibility-note"><InfoIcon size={16} />{selected.military.eligibilityNote}</p></div></div>
           {!!selected.flags.length && <div className="flag-list">{selected.flags.map(flag => <span key={flag}>{flagLabels[flag] || flag} <small>{flag}</small></span>)}</div>}
+          {!!selected.reviewReasons.length && <div className="exclusion-list review-list"><strong>확인 필요한 정보</strong><ul>{selected.reviewReasons.map(reason => <li key={reason}>{reason}</li>)}</ul></div>}
           {!!selected.exclusionReasons.length && <div className="exclusion-list"><strong>제외 이유</strong><ul>{selected.exclusionReasons.map(reason => <li key={reason}>{reason}</li>)}</ul></div>}
           <details><summary>원문 텍스트 및 변경 이력 보기</summary><div className="history-list">{selected.changes.map((entry, index) => <div key={`${entry.at}-${index}`}><time>{formatTime(entry.at)}</time>{entry.types.map(type => <span key={type}>{changes[type]}</span>)}</div>)}</div><pre className="raw-text">{selected.rawText}</pre></details>
           <div className="detail-footer"><span><ClockIcon size={14} />마지막 확인 {formatTime(selected.lastSeenAt)}</span><button className="primary-button" onClick={copyInquiry}><CopyIcon size={17} />병역조건 문의문 복사</button></div>

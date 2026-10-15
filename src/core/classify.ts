@@ -57,23 +57,34 @@ export function classifyMilitary(job: JobSource, now = new Date()): MilitaryVerd
 
 export function classifyJob(job: JobSource, now = new Date()): Classification {
   const military = classifyMilitary(job, now);
+  const closed = job.closed || (!!job.deadline && job.deadline < koreaToday(now));
   const roleText = [job.title, job.duties, job.remarks].join("\n");
   const dutyText = [job.title, job.duties].join(" ");
   const roles = (Object.keys(rules.roles) as Role[]).filter(role => hits(roleText, rules.roles[role]).length > 0);
   const keywords = [...new Set(roles.flatMap(role => hits(roleText, rules.roles[role])))];
   const exclusionReasons: string[] = [];
+  const reviewReasons: string[] = [];
   const flags: string[] = [];
-  if (!["CONFIRMED_NEW_ENTRY", "LIKELY_NEW_ENTRY", "CONDITIONAL_FUTURE"].includes(military.status)) exclusionReasons.push(military.reason);
-  if (!roles.length) exclusionReasons.push("희망 개발직 근거 부족");
+  if (military.status === "UNKNOWN") { if (!closed) reviewReasons.push(military.reason); }
+  else if (!["CONFIRMED_NEW_ENTRY", "LIKELY_NEW_ENTRY", "CONDITIONAL_FUTURE"].includes(military.status)) exclusionReasons.push(military.reason);
+  if (!roles.length) reviewReasons.push("희망 개발직 근거 부족");
   const deniedDuties = hits(dutyText, rules.excludedDuties);
   if (deniedDuties.length) exclusionReasons.push(`제외 직무: ${deniedDuties.join(", ")}`);
   const experienceText = [job.experience, job.title, job.remarks].join(" ");
   const acceptsEntry = regex(rules.experienceAllowed).test(experienceText);
   const deniedExperience = hits(experienceText, rules.experienceDenied);
   const years = experienceText.match(regex(rules.experienceYears));
-  if (!acceptsEntry) exclusionReasons.push(years || deniedExperience.length ? `경력 전용: ${years?.[0] || deniedExperience.join(", ")}` : "신입·경력무관 명시 미확인");
-  if (!rules.regions.some(region => job.location.startsWith(region))) exclusionReasons.push("희망 지역 외 또는 근무지 미확인");
-  if (roles.includes("DevOps") && !hits(roleText, rules.codingEvidence).length) exclusionReasons.push("DevOps/SRE의 실제 코드 작성 근거 부족");
+  if (!acceptsEntry) {
+    const careerOnly = regex(rules.experienceOnly).test(job.experience.trim()) || regex(rules.experienceOnly).test(experienceText);
+    if (years || deniedExperience.length || careerOnly) exclusionReasons.push(`경력 전용: ${years?.[0] || deniedExperience.join(", ") || job.experience}`);
+    else reviewReasons.push("신입·경력무관 명시 미확인");
+  }
+  const location = job.location.trim();
+  if (!rules.regions.some(region => location.startsWith(region))) {
+    if (rules.otherRegions.some(region => location.startsWith(region))) exclusionReasons.push("희망 지역 외");
+    else reviewReasons.push("근무지 미확인");
+  }
+  if (roles.includes("DevOps") && !hits(roleText, rules.codingEvidence).length) reviewReasons.push("DevOps/SRE의 실제 코드 작성 근거 부족");
   if (hits(roleText, rules.siKeywords).length) flags.push("SI_RISK");
   if (hits(dutyText, rules.cautionKeywords).length) flags.push("DUTY_REVIEW");
   const product = hits(roleText, rules.productEvidence).length > 0;
@@ -83,11 +94,14 @@ export function classifyJob(job: JobSource, now = new Date()): Classification {
   else if (job.employeeCount < rules.minimumProductEmployeeCount) exclusionReasons.push(`직원 ${rules.minimumProductEmployeeCount}명 미만`);
   else if (job.employeeCount < rules.preferredEmployeeCount && !product) flags.push("COMPANY_SIZE_REVIEW");
   if (military.toAvailable === "no" && military.newEntryAllowed === "yes") flags.push("TO_CONFLICT");
-  const closed = job.closed || (!!job.deadline && job.deadline < koreaToday(now));
   if (closed && !exclusionReasons.some(reason => reason.includes("마감"))) exclusionReasons.push("접수 마감");
   return {
     military, roles, keywords, flags,
-    excluded: exclusionReasons.length > 0, exclusionReasons,
+    excluded: exclusionReasons.length > 0, exclusionReasons, reviewReasons,
     score: (product ? 30 : 0) + (job.employeeCount !== null && job.employeeCount >= rules.preferredEmployeeCount ? 20 : 0) + (roles.includes("백엔드") ? 15 : 0) + (military.status === "CONFIRMED_NEW_ENTRY" ? 20 : 0) - (flags.includes("SI_RISK") ? 20 : 0),
   };
+}
+
+export function jobGroup(job: Classification): "jobs" | "review" | "excluded" {
+  return job.excluded ? "excluded" : job.reviewReasons.length ? "review" : "jobs";
 }
