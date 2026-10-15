@@ -1,0 +1,70 @@
+name: 병역일터 수집 및 Pages 배포
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '17 0 * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: military-job-finder-pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: 이전 DB 복원
+        run: pnpm exec tsx scripts/state.ts restore
+      - uses: actions/cache@v4
+        with:
+          path: .cache/http
+          key: mma-http-${{ github.run_id }}
+          restore-keys: mma-http-
+      - name: 공개 공고 수집
+        run: pnpm crawl
+      - name: DB 및 변경 이력 보존
+        if: always()
+        run: |
+          if [ -f data/crawl-report.json ]; then
+            pnpm exec tsx scripts/state.ts save
+          fi
+      - run: pnpm test
+      - run: pnpm build
+        env:
+          NEXT_PUBLIC_BASE_PATH: /Military-Job-Finder
+          NEXT_TELEMETRY_DISABLED: '1'
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deployment
