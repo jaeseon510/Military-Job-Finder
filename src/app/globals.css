@@ -159,6 +159,11 @@ summary { cursor: pointer; color: #6b81a1; font-size: 12px; }
 .detail-footer>span { display: flex; align-items: center; gap: 5px; color: #90a0b6; font-size: 10px; }
 .reason-select { display: flex; gap: 8px; align-items: center; color: #6d82a2; padding-left: 10px; }
 .reason-select select { border: 1px solid #dae3f2; background: white; color: #5a7296; border-radius: 8px; font-size: 12px; padding: 9px; }
+.history-notice { display: flex; align-items: flex-start; gap: 12px; padding: 16px; margin-bottom: 18px; border: 1px solid #d8e5fc; border-radius: 12px; background: #f1f6ff; color: #38537a; font-size: 13px; }
+.history-notice>svg { flex-shrink: 0; }
+.history-notice p { margin: 6px 0 0; line-height: 1.7; }
+.job-table .badge { max-width: 190px; white-space: normal; }
+@media (max-width: 760px) { .sidebar nav .nav-item { width: auto; min-width: 0; flex: 1; } .history-notice { font-size: 11px; } .job-table { min-width: 850px; } }
 .load-more { padding: 14px 0 2px; text-align: center; }
 .toast { position: fixed; bottom: 26px; left: calc(50% + 100px); transform: translateX(-50%); z-index: 100; display: flex; align-items: center; gap: 9px; border-radius: 10px; background: #1e365d; color: #fff; box-shadow: 0 8px 30px #14233d26; padding: 14px 20px; font-size: 13px; max-width: 90vw; }
 .toast svg { flex-shrink: 0; }
