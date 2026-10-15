@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { classifyJob, classifyMilitary } from "../src/core/classify";
+import { classifyJob, classifyMilitary, jobGroup } from "../src/core/classify";
 import { job } from "./fixtures";
 
 test("명시적 현역 신규편입 + 유효 공고", () => {
@@ -74,7 +74,7 @@ test("마감·유효성 미확인은 확정에서 제외, 마감 당일 KST는 �
 });
 
 test("경력 3년 이상·주니어 제외, 신입·경력/경력무관 허용", () => {
-  for (const experience of ["경력 3년 이상", "경력 (1년이상)", "경력 2~5년", "주니어", "시니어", "Tech Lead", ""]) {
+  for (const experience of ["경력 3년 이상", "경력 (1년이상)", "경력 2~5년", "주니어", "시니어", "Tech Lead", "경력", "경력직만"]) {
     assert.ok(classifyJob(job({ experience })).excluded, experience);
   }
   for (const experience of ["신입·경력", "신입/경력", "경력무관", "신입"]) assert.equal(classifyJob(job({ experience })).excluded, false, experience);
@@ -89,10 +89,54 @@ test("비개발직 강제 제외, SI는 검토 플래그", () => {
 
 test("영문 기술 키워드는 단어 경계를 사용하고 DevOps는 코드 작성 근거 필요", () => {
   const vague = job({ title: "현역 산업기능요원 SRE", duties: "AWS 인프라 운영" });
-  assert.ok(classifyJob(vague).excluded);
+  assert.equal(jobGroup(classifyJob(vague)), "review");
   assert.equal(classifyJob({ ...vague, duties: "Terraform 인프라 자동화 개발" }).excluded, false);
   assert.equal(classifyJob(job({ title: "디자이너", duties: "ongoing design", remarks: "" })).roles.length, 0);
   assert.ok(classifyJob(job({ duties: "자체 플랫폼 API 개발", employeeCount: 60 })).score > classifyJob(job()).score);
   assert.ok(classifyJob(job({ employeeCount: 20 })).excluded);
   assert.equal(classifyJob(job({ employeeCount: 35, remarks: "자체 제품 SaaS 개발" })).excluded, false);
+});
+
+test("필수 조건 언급이 없으면 제외·지원 대상과 분리해 검토 대기로 보관", () => {
+  const cases = [
+    { source: job({ experience: "" }), reason: /신입·경력무관/ },
+    { source: job({ title: "채용", duties: "", remarks: "", employmentType: "" }), reason: /개발직/ },
+    { source: job({ title: "백엔드 개발자", serviceType: "", employmentType: "" }), reason: /현역 산업기능요원/ },
+    { source: job({ activeAssigned: null, activeEnrolled: null }), reason: /TO 정보 부족/ },
+    { source: job({ deadline: null, applicationPeriod: "" }), reason: /접수기간/ },
+    { source: job({ location: "" }), reason: /근무지 미확인/ },
+    { source: job({ location: "협의 후 결정" }), reason: /근무지 미확인/ },
+    { source: job({ title: "현역 산업기능요원 SRE", duties: "AWS 인프라 운영" }), reason: /코드 작성 근거 부족/ },
+  ];
+  for (const { source, reason } of cases) {
+    const result = classifyJob(source);
+    assert.equal(result.excluded, false);
+    assert.deepEqual(result.exclusionReasons, []);
+    assert.equal(jobGroup(result), "review");
+    assert.ok(result.reviewReasons.some(value => reason.test(value)), String(reason));
+    assert.equal(result.military.userEligibility, "unknown");
+  }
+});
+
+test("명확한 제외 사유는 미확인 정보보다 우선하며 세 목록은 겹치지 않음", () => {
+  for (const source of [
+    job({ title: "현역 전직 백엔드", experience: "" }),
+    job({ title: "보충역 채용", serviceType: "보충역", duties: "" }),
+    job({ employmentType: "전문연구요원", experience: "" }),
+    job({ experience: "경력 3년 이상", location: "" }),
+    job({ duties: "PLC 개발", experience: "" }),
+    job({ location: "부산광역시", experience: "" }),
+    job({ activeAssigned: 0, experience: "" }),
+    job({ closed: true, experience: "" }),
+    job({ employeeCount: 20, experience: "" }),
+  ]) {
+    const result = classifyJob(source);
+    assert.equal(jobGroup(result), "excluded");
+    assert.ok(result.exclusionReasons.length);
+  }
+  const eligible = classifyJob(job());
+  assert.equal(jobGroup(eligible), "jobs");
+  assert.deepEqual(eligible.reviewReasons, []);
+  assert.equal(eligible.military.status, "LIKELY_NEW_ENTRY");
+  assert.equal(eligible.military.newEntryAllowed, "unknown");
 });

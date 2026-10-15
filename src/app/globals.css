@@ -100,6 +100,7 @@ h2 { color: #14213a; letter-spacing: -.3px; }
 .star-button { display: grid; place-items: center; border: 0; background: none; padding: 5px; color: #a0b1ca; }
 .star-button:hover, .star-button.saved { color: #3476f6; }
 .excluded-reason { text-align: left; border: 0; background: #fff0ef; color: #b85655; padding: 6px 8px; border-radius: 5px; white-space: normal; font-size: 10px; max-width: 155px; line-height: 1.5; }
+.review-reason, .exclusion-list.review-list { background: #fff5df; color: #8d5c0f; }
 .empty-state { text-align: center; padding: 46px 24px 54px; }
 .empty-icon { display: grid; place-items: center; color: #729bef; margin: 0 auto 16px; background: #eff4ff; width: 70px; height: 70px; border-radius: 50%; }
 .empty-state h3 { font-size: 17px; margin: 0 0 10px; }

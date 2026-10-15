@@ -49,6 +49,7 @@ export interface Classification {
   flags: string[];
   excluded: boolean;
   exclusionReasons: string[];
+  reviewReasons: string[];
   score: number;
 }
 
