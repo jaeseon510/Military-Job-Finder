@@ -11,7 +11,7 @@
 - 수집은 공개 검색/상세만, 최소 2초 간격·캐시 유지. 디버깅 중 반복 수집보다 캐시·합성 테스트를 우선한다.
 - 불필요한 주석·디버그 로그·임시 코드는 커밋하지 않는다. CLI 진행/실패 로그는 유지한다.
 - API 추가 시 Swagger 문서/UI와 예제도 업데이트한다. 현재 MVP는 별도 서버 API가 없다.
-- Pages는 정적 배포. `.github/workflows/pages.yml`이 `main`에서 수집·배포한다. `chore/crawl-state`는 수집 DB 전용으로 소스에 머지하지 않는다.
+- 기본 브랜치는 `develop`. `schedule.yml`이 예약 시 `main`의 `pages.yml`을 호출하며 수집·Pages 배포는 `main`에서만 수행한다. `chore/crawl-state`는 수집 DB 전용으로 소스에 머지하지 않는다.
 
 <!-- BEGIN:nextjs-agent-rules -->
 
