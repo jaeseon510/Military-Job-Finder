@@ -91,7 +91,7 @@ DB는 첫 실행에 `data/military-jobs.sqlite`로 자동 생성됩니다. 환�
 
 GitHub Pages는 정적 파일을 제공하므로 수집기·SQLite를 직접 실행하지 못합니다. **Actions에서 수집 → SQLite 저장 → 정적 빌드 → Pages 배포**로 동작합니다. [Next.js 정적 내보내기](https://nextjs.org/docs/app/guides/static-exports), [Pages 사용자 지정 워크플로](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)를 따릅니다.
 
-1. 기능 브랜치 → `develop` PR을 검토·머지합니다.
+1. 기본 브랜치는 `develop`입니다. 기능 브랜치 → `develop` PR을 검토·머지합니다.
 2. `develop` → `main` 릴리스 PR을 만든 뒤 사용자가 머지합니다.
 3. 저장소 **Settings → Pages → Source: GitHub Actions**를 선택합니다.
 4. `main` 변경 시 자동 배포합니다. 수동 실행은 Actions의 `병역일터 수집 및 Pages 배포` → Run workflow → `main`입니다.
@@ -99,6 +99,8 @@ GitHub Pages는 정적 파일을 제공하므로 수집기·SQLite를 직접 실
 배포 주소: `https://jaeseon510.github.io/Military-Job-Finder/jobs/`
 
 매일 **한국 시간 오전 9:17** 수집·재배포합니다. GitHub 스케줄은 지연될 수 있고, 공개 저장소의 장기 비활성 시 스케줄이 중단될 수 있습니다. 마지막 확인 시간을 화면에서 확인하세요. 수집 전체가 실패하면 기존 배포를 유지합니다.
+
+정기 실행은 [GitHub의 기본 브랜치 실행 규칙](https://docs.github.com/en/actions/reference/workflows-and-actions/events-that-trigger-workflows#schedule)에 따라 `develop`의 `schedule.yml`이 `main`의 `pages.yml`을 실행하도록 구성했습니다. 실제 수집·빌드·배포와 Pages 환경의 허용 브랜치는 `main`으로 제한합니다. 예약 작업을 수동 점검할 때는 `일일 main 수집 예약` → `develop`을 선택합니다.
 
 DB와 보고서는 **`chore/crawl-state` 브랜치**에 압축 저장합니다. Actions 캐시가 만료돼도 최초 발견시각·이전 hash·변경 이력이 유지됩니다. 이 브랜치는 소스에 머지하지 마세요. HTTP 캐시는 Actions 캐시에만 보관합니다. 저장소가 공개이므로 상태 브랜치도 공개됩니다. 수집 데이터는 공개 공고 본문에 한정하며 자격·개인정보를 입력하지 않습니다.
 
