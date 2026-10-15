@@ -37,6 +37,18 @@ test("보충역 신규편입과 현역 전직을 혼동하지 않음", () => {
 test("신규편입 부정·질문을 긍정 판정하지 않음", () => {
   assert.equal(classifyMilitary(job({ remarks: "현역 신규편입 불가" })).status, "TRANSFER_ONLY");
   assert.notEqual(classifyMilitary(job({ remarks: "현역 신규편입 가능 여부 문의" })).status, "CONFIRMED_NEW_ENTRY");
+  assert.notEqual(classifyMilitary(job({ remarks: "현역 신규편입이 가능한지 확인 필요" })).status, "CONFIRMED_NEW_ENTRY");
+  assert.notEqual(classifyMilitary(job({ remarks: "현역 신규 입사 및 신규 지원 환영" })).status, "CONFIRMED_NEW_ENTRY");
+  assert.equal(classifyMilitary(job({ employmentType: "전문연구요원", remarks: "현역 신규편입 가능" })).status, "RESEARCH_ONLY");
+});
+
+test("신규편입 언급 뒤 장문 부정이 이어지는 실제 경계 사례", () => {
+  const transfer = job({ title: "산업기능요원 채용(현역 전직)", remarks: "현역 전직 (현 업체 복무 6개월 이상)\n현역 신규 편입은 현재 배정인원이 없어 채용하지 않습니다." });
+  assert.equal(classifyMilitary(transfer).status, "TRANSFER_ONLY");
+  assert.ok(classifyJob(transfer).excluded);
+  assert.notEqual(classifyMilitary(job({ remarks: "현역 신규편입은 현재는 모집하지 않습니다." })).status, "CONFIRMED_NEW_ENTRY");
+  assert.notEqual(classifyMilitary(job({ remarks: "현역 신규편입 없음" })).status, "CONFIRMED_NEW_ENTRY");
+  assert.equal(classifyMilitary(job({ remarks: "현역 신규편입 가능하며 학력 제한 없음" })).status, "CONFIRMED_NEW_ENTRY");
 });
 
 test("향후 배정은 현재 편입 가능으로 판정하지 않음", () => {
@@ -81,4 +93,6 @@ test("영문 기술 키워드는 단어 경계를 사용하고 DevOps는 코드 
   assert.equal(classifyJob({ ...vague, duties: "Terraform 인프라 자동화 개발" }).excluded, false);
   assert.equal(classifyJob(job({ title: "디자이너", duties: "ongoing design", remarks: "" })).roles.length, 0);
   assert.ok(classifyJob(job({ duties: "자체 플랫폼 API 개발", employeeCount: 60 })).score > classifyJob(job()).score);
+  assert.ok(classifyJob(job({ employeeCount: 20 })).excluded);
+  assert.equal(classifyJob(job({ employeeCount: 35, remarks: "자체 제품 SaaS 개발" })).excluded, false);
 });

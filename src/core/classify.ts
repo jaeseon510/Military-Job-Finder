@@ -20,7 +20,7 @@ export function classifyMilitary(job: JobSource, now = new Date()): MilitaryVerd
   const supplementaryOnly = contains(job.serviceType, m.supplementary) && !contains(job.serviceType, m.active) && !/현역/.test(text);
   const clauses = text.split(/[\n;。!?]|\.(?:\s|$)/).filter(Boolean);
   const activeNew = clauses.some(clause => {
-    if (regex(m.newEntryDenied).test(clause) || /신규\s*편입\s*가능\s*여부/.test(clause)) return false;
+    if (regex(m.newEntryDenied).test(clause) || /신규\s*편입[^\n]{0,20}가능\s*(?:여부|한지|할지)/.test(clause)) return false;
     if (!regex(m.newEntry).test(clause)) return false;
     if (/보충역\s*신규/.test(clause) && !/현역[^\n/|,]{0,40}신규/.test(clause)) return false;
     return /현역[^\n/|,]{0,60}(?:신규\s*편입|신규\s*입사|신규\s*지원)/.test(clause)
@@ -43,7 +43,7 @@ export function classifyMilitary(job: JobSource, now = new Date()): MilitaryVerd
     userEligibility: "unknown",
     eligibilityNote: "대학 학력이 있는 지원자의 TO 사용 가능 여부·우선배정 자격은 회사/병무청 확인 필요",
   });
-  if (research && !industrial) return result("RESEARCH_ONLY", "전문연구요원 전용 공고", "no");
+  if ((contains(job.employmentType, m.research) && !contains(job.employmentType, m.industrial)) || (research && !industrial)) return result("RESEARCH_ONLY", "전문연구요원 전용 공고", "no");
   if (supplementaryOnly) return result("SUPPLEMENTARY_ONLY", "보충역 전용 공고", "no");
   if (transfer || denied) return result("TRANSFER_ONLY", "현역 전직 전용 또는 현역 신규편입 불가 명시", "no");
   if (!valid) return result("UNKNOWN", job.closed || (job.deadline && job.deadline < koreaToday(now)) ? "접수 마감 · 현재 신규편입 가능 공고가 아님" : "현재 유효한 접수기간 확인 필요", "unknown");
@@ -68,9 +68,9 @@ export function classifyJob(job: JobSource, now = new Date()): Classification {
   const deniedDuties = hits(dutyText, rules.excludedDuties);
   if (deniedDuties.length) exclusionReasons.push(`제외 직무: ${deniedDuties.join(", ")}`);
   const experienceText = [job.experience, job.title, job.remarks].join(" ");
-  const acceptsEntry = /신입|경력\s*무관/.test(experienceText);
+  const acceptsEntry = regex(rules.experienceAllowed).test(experienceText);
   const deniedExperience = hits(experienceText, rules.experienceDenied);
-  const years = experienceText.match(/(?:경력\s*[:：()]*\s*)?\d+\s*년\s*(?:이상|↑|\+)|경력\s*\d+\s*[~～-]\s*\d+\s*년/);
+  const years = experienceText.match(regex(rules.experienceYears));
   if (!acceptsEntry) exclusionReasons.push(years || deniedExperience.length ? `경력 전용: ${years?.[0] || deniedExperience.join(", ")}` : "신입·경력무관 명시 미확인");
   if (!rules.regions.some(region => job.location.startsWith(region))) exclusionReasons.push("희망 지역 외 또는 근무지 미확인");
   if (roles.includes("DevOps") && !hits(roleText, rules.codingEvidence).length) exclusionReasons.push("DevOps/SRE의 실제 코드 작성 근거 부족");
@@ -80,7 +80,8 @@ export function classifyJob(job: JobSource, now = new Date()): Classification {
   if (product) flags.push("PRODUCT_EVIDENCE");
   else flags.push("PRODUCT_UNKNOWN");
   if (job.employeeCount === null) flags.push("COMPANY_SIZE_UNKNOWN");
-  else if (job.employeeCount < rules.minimumProductEmployeeCount || (job.employeeCount < rules.preferredEmployeeCount && !product)) flags.push("COMPANY_SIZE_REVIEW");
+  else if (job.employeeCount < rules.minimumProductEmployeeCount) exclusionReasons.push(`직원 ${rules.minimumProductEmployeeCount}명 미만`);
+  else if (job.employeeCount < rules.preferredEmployeeCount && !product) flags.push("COMPANY_SIZE_REVIEW");
   if (military.toAvailable === "no" && military.newEntryAllowed === "yes") flags.push("TO_CONFLICT");
   const closed = job.closed || (!!job.deadline && job.deadline < koreaToday(now));
   if (closed && !exclusionReasons.some(reason => reason.includes("마감"))) exclusionReasons.push("접수 마감");
