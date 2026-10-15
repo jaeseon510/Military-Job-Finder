@@ -8,6 +8,7 @@ import { inquiryText } from "../core/inquiry";
 import type { Change, Dataset, MilitaryStatus, Role } from "../core/types";
 import { koreaToday } from "../core/date";
 import { classifyJob, jobGroup } from "../core/classify";
+import { filterJobs, industryOptions } from "../core/filter";
 
 const statusTone: Record<MilitaryStatus, string> = { CONFIRMED_NEW_ENTRY: "green", LIKELY_NEW_ENTRY: "amber", CONDITIONAL_FUTURE: "blue", TRANSFER_ONLY: "gray", SUPPLEMENTARY_ONLY: "gray", RESEARCH_ONLY: "gray", NO_ACTIVE_TO: "red", UNKNOWN: "gray" };
 const changes: Record<Change, string> = { NEW: "신규 공고", CLOSED: "접수 마감", REOPENED: "접수 재개", TO_CHANGED: "TO 변경", ENROLLED_CHANGED: "편입인원 변경", MILITARY_CHANGED: "병역조건·본문 변경", SALARY_CHANGED: "급여 변경", DEADLINE_CHANGED: "마감일 변경", CONTENT_CHANGED: "내용 변경" };
@@ -27,6 +28,7 @@ export function Dashboard({ dataset, mode }: { dataset: Dataset; mode: "jobs" | 
   const [statuses, setStatuses] = useState<MilitaryStatus[]>([...rules.defaultStatuses]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [regions, setRegions] = useState<string[]>([]);
+  const [industry, setIndustry] = useState("all");
   const [sort, setSort] = useState("recommended");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [saved, setSaved] = useState<string[]>([]);
@@ -64,15 +66,8 @@ export function Dashboard({ dataset, mode }: { dataset: Dataset; mode: "jobs" | 
   }, [settings, inquiryOpen]);
 
   const currentJobs = useMemo(() => dataset.jobs.map(job => ({ ...job, ...classifyJob(job, new Date(now)) })), [dataset, now]);
-  const visibleJobs = useMemo(() => currentJobs.filter(job => {
-    if (jobGroup(job) !== mode) return false;
-    if (mode === "jobs" && !statuses.includes(job.military.status)) return false;
-    if (roles.length && !roles.some(role => job.roles.includes(role))) return false;
-    if (regions.length && !regions.some(region => job.location.startsWith(region))) return false;
-    if (trackedOnly && !saved.includes(job.companyCode)) return false;
-    if (excludedReason !== "all" && mode !== "jobs" && !(mode === "review" ? job.reviewReasons : job.exclusionReasons).some(reason => reason.includes(excludedReason))) return false;
-    return !query || [job.companyName, job.title, job.duties, job.remarks, ...job.keywords].join(" ").toLowerCase().includes(query.toLowerCase());
-  }).sort((a, b) => sort === "deadline" ? (a.deadline || "9999").localeCompare(b.deadline || "9999") : sort === "latest" ? b.firstSeenAt.localeCompare(a.firstSeenAt) : b.score - a.score || b.firstSeenAt.localeCompare(a.firstSeenAt)), [currentJobs, mode, statuses, roles, regions, trackedOnly, saved, excludedReason, query, sort]);
+  const industries = useMemo(() => industryOptions(currentJobs), [currentJobs]);
+  const visibleJobs = useMemo(() => filterJobs(currentJobs, { group: mode, statuses: mode === "jobs" ? statuses : undefined, roles, regions, industry, query, reason: excludedReason, trackedCompanies: trackedOnly ? saved : undefined }).sort((a, b) => sort === "deadline" ? (a.deadline || "9999").localeCompare(b.deadline || "9999") : sort === "latest" ? b.firstSeenAt.localeCompare(a.firstSeenAt) : b.score - a.score || b.firstSeenAt.localeCompare(a.firstSeenAt)), [currentJobs, mode, statuses, roles, regions, industry, trackedOnly, saved, excludedReason, query, sort]);
   const selected = visibleJobs.find(job => job.id === selectedId) || visibleJobs[0];
   const eligible = currentJobs.filter(job => jobGroup(job) === "jobs");
   const reviewCount = currentJobs.filter(job => jobGroup(job) === "review").length;
@@ -94,7 +89,7 @@ export function Dashboard({ dataset, mode }: { dataset: Dataset; mode: "jobs" | 
     try { await navigator.clipboard.writeText(inquiryText); setToast("병역조건 문의문을 복사했습니다."); }
     catch { setInquiryOpen(true); setToast("아래 문의문을 선택해서 복사해 주세요."); }
   }
-  function reset() { setQuery(""); setStatuses([...rules.defaultStatuses]); setRoles([]); setRegions([]); setTrackedOnly(false); setExcludedReason("all"); }
+  function reset() { setQuery(""); setStatuses([...rules.defaultStatuses]); setRoles([]); setRegions([]); setIndustry("all"); setTrackedOnly(false); setExcludedReason("all"); }
 
   return <div className="app-shell">
     <aside className="sidebar" aria-label="주 메뉴">
@@ -120,6 +115,7 @@ export function Dashboard({ dataset, mode }: { dataset: Dataset; mode: "jobs" | 
       <main>
         <div className="filter-bar">
           <div className="filter-chips">
+            <label className="reason-select"><FunnelIcon size={16} /><select aria-label="업종·분야" value={industry} onChange={event => setIndustry(event.target.value)}><option value="all">모든 업종·분야</option>{industries.map(value => <option key={value} value={value}>{value}</option>)}</select></label>
             {mode === "jobs" && (rules.defaultStatuses).map(status => <button key={status} aria-pressed={status === "CONFIRMED_NEW_ENTRY" ? statuses.length === 1 && statuses[0] === status : statuses.includes(status)} className={`filter-chip status-filter ${statuses.includes(status) ? "selected" : ""}`} onClick={() => setStatuses(status === "CONFIRMED_NEW_ENTRY" ? statuses.length === 1 && statuses[0] === status ? [...rules.defaultStatuses] : [status] : toggle(statuses, status))}><span className={`status-dot ${statusTone[status]}`} />{status === "CONFIRMED_NEW_ENTRY" ? "신규편입 확정만" : status === "LIKELY_NEW_ENTRY" ? "문의필요 포함" : "조건부"}</button>)}
             {mode !== "jobs" && <label className="reason-select"><FunnelIcon size={16} /><select aria-label={mode === "review" ? "검토 사유" : "제외 사유"} value={excludedReason} onChange={event => setExcludedReason(event.target.value)}><option value="all">{mode === "review" ? "모든 검토 사유" : "모든 제외 사유"}</option>{(mode === "review" ? ["현역", "TO", "개발직", "신입", "근무지", "DevOps", "접수기간"] : ["전직", "보충역", "전문연구", "경력", "제외 직무", "지역", "TO", "마감", "직원"]).map(reason => <option key={reason} value={reason}>{reason}</option>)}</select></label>}
             <span className="filter-separator" />
