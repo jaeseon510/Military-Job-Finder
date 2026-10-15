@@ -7,6 +7,7 @@
 - 구조가 필요하면 README의 파일 표와 `docs/source-structure.md`를 먼저 읽고 필요한 파일만 확인한다.
 - 현역이라는 단어·잔여 TO만으로 신규편입을 확정하지 않는다. `USER_ELIGIBILITY`는 항상 `unknown`.
 - 보충역 신규편입·현역 전직·전문연구요원을 혼동하지 않는다. 조건부 향후 배정을 현재 가능으로 표시하지 않는다.
+- 필수 정보 미확인은 `reviewReasons`로 `/review`에 보관한다. 명확한 제외 사유가 있으면 `/excluded`가 우선하며 세 목록은 겹치지 않는다.
 - 기준 변경 후 `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm classify`, `pnpm build`로 확인한다.
 - 수집은 공개 검색/상세만, 최소 2초 간격·캐시 유지. 디버깅 중 반복 수집보다 캐시·합성 테스트를 우선한다.
 - 불필요한 주석·디버그 로그·임시 코드는 커밋하지 않는다. CLI 진행/실패 로그는 유지한다.
